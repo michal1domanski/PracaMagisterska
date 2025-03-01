@@ -8,6 +8,7 @@ import ffmpeg
 import pygame
 import subprocess
 import datetime
+import CDetectLane
 
 class CFFmpeg:
     def __init__(self, disp_size):
