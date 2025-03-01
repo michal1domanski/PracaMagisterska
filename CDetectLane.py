@@ -2,6 +2,15 @@ import cv2
 import numpy as np
 import carla
 
+class CDetectLane:
+    def __init__(self, image) -> None:
+        self.image = image
+
+    def detect_lines(self):
+        gray = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
+        
+        pass
+
 def detect_lanes(image):
     """Wykrywanie pasów ruchu za pomocą przetwarzania obrazu"""
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)  # Skala szarości
