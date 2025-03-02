@@ -4,31 +4,48 @@ import carla
 import time
 
 class CDetectLane:
-    def __init__(self, image) -> None:
-        self.image = image
+    def __init__(self) -> None:
+        pass
 
-    def detect_lines(self):
-        gray = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
+    def detect_lines(self, image):
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         kernel_size = 5
         blue_gray = cv2.GaussianBlur(gray, (kernel_size, kernel_size),0)
 
         low_treshold = 50
         high_treshold = 150
         edges = cv2.Canny(blue_gray, low_treshold, high_treshold)
+        edges = self.region_of_interest(edges)
         rho = 1
         theta = np.pi / 100
         threshold = 15
-        min_line_length = 15
-        max_line_gap = 5
-        line_image = np.copy(self.image)* 0 
+        min_line_length = 50
+        max_line_gap = 10
+        line_image = np.copy(image)* 0 
         lines = cv2.HoughLinesP(edges, rho, theta, threshold, np.array([]),
                     min_line_length, max_line_gap)
 
         for line in lines:
             for x1, y1, x2, y2 in line:
-                cv2.line(line_image, (x1, y1), (x2, y2), (0, 0, 255), 20)
-        
-        self.image = cv2.addWeighted(self.image, 0.8, line_image, 1, 0)
+                cv2.line(line_image, (x1, y1), (x2, y2), (0, 0, 255), 1)
+        image = cv2.addWeighted(image, 0.8, line_image, 1, 0)
+        return image
+    
+    def region_of_interest(self, edges):
+        height, width = edges.shape
+        mask = np.zeros_like(edges)
+
+        # Define a polygon mask to focus on the lane area
+        polygon = np.array([[
+            (width * 0.1, height),  # Bottom-left
+            (width * 0.45, height * 0.6),  # Top-left
+            (width * 0.55, height * 0.6),  # Top-right
+            (width * 0.9, height)  # Bottom-right
+        ]], np.int32)
+
+        cv2.fillPoly(mask, polygon, 255)  # Fill ROI with white
+        masked_edges = cv2.bitwise_and(edges, mask)
+        return masked_edges
 
 # def detect_lanes(image):
 #     """Wykrywanie pasów ruchu za pomocą przetwarzania obrazu"""
