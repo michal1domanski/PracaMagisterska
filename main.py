@@ -8,7 +8,7 @@ import ffmpeg
 import pygame
 import subprocess
 import datetime
-import CDetectLane
+from CDetectLane import CDetectLane
 
 class CFFmpeg:
     def __init__(self, disp_size):
@@ -53,6 +53,7 @@ class CFFmpeg:
             array = np.frombuffer(image.raw_data, dtype=np.uint8)
             array = array.reshape((image.height, image.width, 4))  # RGBA
             frame = array[:, :, :3]  # Konwersja do BGR (OpenCV)
+            CDetectLane(frame).detect_lines()
             self.ffmpeg_process.stdin.write(frame.tobytes())
 
 class CCamera:
