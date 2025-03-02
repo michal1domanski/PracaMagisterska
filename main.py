@@ -53,7 +53,7 @@ class CFFmpeg:
             array = np.frombuffer(image.raw_data, dtype=np.uint8)
             array = array.reshape((image.height, image.width, 4))  # RGBA
             frame = array[:, :, :3]  # Konwersja do BGR (OpenCV)
-            CDetectLane(frame).detect_lines()
+            #CDetectLane(frame).detect_lines()
             self.ffmpeg_process.stdin.write(frame.tobytes())
 
 class CCamera:
@@ -65,7 +65,7 @@ class CCamera:
         self.camera = world.spawn_actor(self.camera_bp, camera_init_trans, attach_to=vehicle)
 
     def start_listening(self, CFFmpeg):
-        self.camera.listen(lambda image: CFFmpeg.process_image(image))
+        self.camera.listen(lambda image: CFFmpeg.process_image(image)) #image.save_to_disk('C:/Users/Michał/Desktop/Praca-magisterska/out/%06d.png' % image.frame))
 
     def stop_listening(self):
         self.camera.stop()
