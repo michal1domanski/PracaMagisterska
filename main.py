@@ -29,7 +29,7 @@ class CFFmpeg:
                 "-s", f"{disp_size[0]}x{disp_size[1]}",
                 "-r", "30",  # FPS
                 "-i", "-",  # Input z `stdin`
-                "-c:v", "libx264",
+                "-c:v", "libx264",#"libaom-av1",#
                 "-preset", "ultrafast",
                 "-crf", "23",
                 filename
@@ -53,13 +53,14 @@ class CFFmpeg:
             array = np.frombuffer(image.raw_data, dtype=np.uint8)
             array = array.reshape((image.height, image.width, 4))  # RGBA
             frame = array[:, :, :3]  # Konwersja do BGR (OpenCV)
-            frame = CDetectLane().detect_lines(frame)
+            frame = CDetectLane(image.width, image.height).detect_lines(frame)
             self.ffmpeg_process.stdin.write(frame.tobytes())
 
 class CCamera:
     def __init__(self, world, bp_lib, disp_size, vehicle):
         self.camera_bp = bp_lib.find('sensor.camera.rgb')
-        camera_init_trans = carla.Transform(carla.Location(z=1.3,y=0, x=0.5))
+        camera_init_trans = carla.Transform(carla.Location(z=1.3,y=0, x=0.7))
+        self.camera_bp.set_attribute("fov", "70")
         self.camera_bp.set_attribute('image_size_x', str(disp_size[0]))
         self.camera_bp.set_attribute('image_size_y', str(disp_size[1]))
         self.camera = world.spawn_actor(self.camera_bp, camera_init_trans, attach_to=vehicle)
@@ -96,7 +97,7 @@ class CCar:
         self.spectator.set_transform(spectator_transform)
 
     def set_camera_on_a_car(self):
-        self.scalar = 3
+        self.scalar = 5
         self.disp_size = [x * self.scalar for x in [256, 256]]
         self.camera = CCamera(self.world, self.bp_lib, self.disp_size, self.vehicle)
 
@@ -118,6 +119,7 @@ class CCar:
     def destroy_vehicle(self):
         self.destroy_camera()
         self.vehicle.destroy()
+        print("vehicle and camera succesfully destroyed :D")
 
     def car_go(self):
         self.vehicle.set_autopilot(True)
@@ -145,7 +147,7 @@ class CCar:
                         running = False
 
 if __name__ == "__main__":
-    car = CCar("vehicle.tesla.model3")
+    car = CCar() #"vehicle.tesla.model3"
     car.record_video()
     car.destroy_vehicle()
 

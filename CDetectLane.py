@@ -4,7 +4,11 @@ import carla
 import time
 
 class CDetectLane:
-    def __init__(self) -> None:
+    def __init__(self, width, height):
+        self.bottomLeft = (width * 0.1, height * 0.71)
+        self.topLeft = (width * 0.05, height * 0.48)
+        self.topRight = (width * 0.95, height * 0.48)
+        self.bottomRight = (width * 0.9, height * 0.71)
         pass
 
     def detect_lines(self, image):
@@ -19,7 +23,7 @@ class CDetectLane:
         rho = 1
         theta = np.pi / 100
         threshold = 15
-        min_line_length = 50
+        min_line_length = 15
         max_line_gap = 10
         line_image = np.copy(image)* 0 
         lines = cv2.HoughLinesP(edges, rho, theta, threshold, np.array([]),
@@ -29,6 +33,11 @@ class CDetectLane:
             for x1, y1, x2, y2 in line:
                 cv2.line(line_image, (x1, y1), (x2, y2), (0, 0, 255), 1)
         image = cv2.addWeighted(image, 0.8, line_image, 1, 0)
+
+        height, width = edges.shape
+        points = np.array([[self.bottomLeft], [self.topLeft], [self.topRight], [self.bottomRight]], np.int32)
+        cv2.polylines(image, [points], isClosed = True, color = (0,255,0), thickness = 1)
+        
         return image
     
     def region_of_interest(self, edges):
@@ -37,12 +46,11 @@ class CDetectLane:
 
         # Define a polygon mask to focus on the lane area
         polygon = np.array([[
-            (width * 0.1, height),  # Bottom-left
-            (width * 0.45, height * 0.6),  # Top-left
-            (width * 0.55, height * 0.6),  # Top-right
-            (width * 0.9, height)  # Bottom-right
+            self.bottomLeft,  # Bottom-left
+            self.topLeft,  # Top-left
+            self.topRight,  # Top-right
+            self.bottomRight  # Bottom-right
         ]], np.int32)
-
         cv2.fillPoly(mask, polygon, 255)  # Fill ROI with white
         masked_edges = cv2.bitwise_and(edges, mask)
         return masked_edges
