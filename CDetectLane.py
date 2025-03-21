@@ -11,39 +11,79 @@ class CDetectLane:
         self.bottomRight = (width * 0.9, height * 0.71)
         pass
 
-    def detect_lines(self, image):
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        kernel_size = 5
-        blue_gray = cv2.GaussianBlur(gray, (kernel_size, kernel_size),0)
+    def detect_lanes(self, image):
+        # Konwersja do HSV
+        # image = self.preprocess_image(image)
+        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
-        low_treshold = 50
-        high_treshold = 150
-        edges = cv2.Canny(blue_gray, low_treshold, high_treshold)
-        edges = self.region_of_interest(edges)
-        rho = 1
-        theta = np.pi / 100
-        threshold = 15
-        min_line_length = 15
-        max_line_gap = 10
-        line_image = np.copy(image)* 0 
-        lines = cv2.HoughLinesP(edges, rho, theta, threshold, np.array([]),
-                    min_line_length, max_line_gap)
+        # Zakresy kolorów dla białych i żółtych pasów
+        lower_white = np.array([0, 0, 200], dtype=np.uint8)
+        upper_white = np.array([255, 30, 255], dtype=np.uint8)
 
-        for line in lines:
-            for x1, y1, x2, y2 in line:
-                cv2.line(line_image, (x1, y1), (x2, y2), (0, 0, 255), 1)
-        image = cv2.addWeighted(image, 0.8, line_image, 1, 0)
+        lower_yellow = np.array([15, 100, 100], dtype=np.uint8)
+        upper_yellow = np.array([35, 255, 255], dtype=np.uint8)
 
-        height, width = edges.shape
-        points = np.array([[self.bottomLeft], [self.topLeft], [self.topRight], [self.bottomRight]], np.int32)
-        cv2.polylines(image, [points], isClosed = True, color = (0,255,0), thickness = 1)
+        # Maskowanie białych i żółtych pasów
+        white_mask = cv2.inRange(hsv, lower_white, upper_white)
+        yellow_mask = cv2.inRange(hsv, lower_yellow, upper_yellow)
         
-        return image
+        # Połączenie obu masek
+        lane_mask = cv2.bitwise_or(white_mask, yellow_mask)
+        
+        # Zastosowanie maski do obrazu
+        masked_image = cv2.bitwise_and(image, image, mask=lane_mask)
+        
+        # Konwersja na skale szarości i redukcja szumu
+        gray = cv2.cvtColor(masked_image, cv2.COLOR_BGR2GRAY)
+        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+        
+        # Detekcja krawędzi
+        edges = cv2.Canny(blurred, 50, 150)
+
+        # Ograniczenie obszaru do ROI
+        edges = self.region_of_interest(edges)
+
+        # height, width = image.shape[:2]
+        # mask = np.zeros_like(edges)
+        # polygon = np.array([[
+        # (0, height), (width, height), (width//2, height//2)
+        # ]], np.int32)
+    
+        # cv2.fillPoly(mask, polygon, 255)
+        # masked_edges = cv2.bitwise_and(edges, mask)
+
+        # Hough Transform do wykrywania linii
+        rho = 1
+        theta = np.pi / 180
+        threshold = 30
+        min_line_length = 30
+        max_line_gap = 40
+
+        lines = cv2.HoughLinesP(edges, rho, theta, threshold, np.array([]), 
+                                min_line_length, max_line_gap)
+
+        # Rysowanie wykrytych linii
+        line_image = np.zeros_like(image)
+        if lines is not None:
+            for line in lines:
+                for x1, y1, x2, y2 in line:
+                    cv2.line(line_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+
+        # Połączenie wykrytych pasów z obrazem
+        result = cv2.addWeighted(image, 0.8, line_image, 1, 0)
+        
+        return result
     
     def region_of_interest(self, edges):
-        height, width = edges.shape
+        # height, width = edges.shape
         mask = np.zeros_like(edges)
 
+        # polygon = np.array([[
+        #     (0, height),
+        #     (width // 2 - 50, height // 2),
+        #     (width // 2 + 50, height // 2),
+        #     (width, height)
+        # ]], np.int32)
         # Define a polygon mask to focus on the lane area
         polygon = np.array([[
             self.bottomLeft,  # Bottom-left
@@ -52,8 +92,35 @@ class CDetectLane:
             self.bottomRight  # Bottom-right
         ]], np.int32)
         cv2.fillPoly(mask, polygon, 255)  # Fill ROI with white
+        
         masked_edges = cv2.bitwise_and(edges, mask)
+        cv2.polylines(masked_edges, polygon, True, (125, 125, 0))
         return masked_edges
+
+    def enhance_contrast(self, image):
+        """Enhances contrast using Adaptive Histogram Equalization (CLAHE)."""
+        lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
+        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+        l = clahe.apply(l)
+        enhanced_lab = cv2.merge((l, a, b))
+        enhanced_image = cv2.cvtColor(enhanced_lab, cv2.COLOR_LAB2BGR)
+        return enhanced_image
+
+    def adjust_brightness(self, image):
+        """Brightens shadowed areas using HSV adjustments."""
+        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+        h, s, v = cv2.split(hsv)
+        v = cv2.equalizeHist(v)  # Equalize the brightness
+        adjusted_hsv = cv2.merge((h, s, v))
+        brightened_image = cv2.cvtColor(adjusted_hsv, cv2.COLOR_HSV2BGR)
+        return brightened_image
+
+    def preprocess_image(self, image):
+        """Applies contrast enhancement and brightness adjustment for better lane detection."""
+        image = self.enhance_contrast(image)
+        # image = self.adjust_brightness(image)
+        return image
 
 # def detect_lanes(image):
 #     """Wykrywanie pasów ruchu za pomocą przetwarzania obrazu"""

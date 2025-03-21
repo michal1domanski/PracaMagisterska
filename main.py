@@ -4,7 +4,7 @@ import cv2
 import time
 import random
 import math
-import ffmpeg
+# import ffmpeg
 import pygame
 import subprocess
 import datetime
@@ -53,7 +53,7 @@ class CFFmpeg:
             array = np.frombuffer(image.raw_data, dtype=np.uint8)
             array = array.reshape((image.height, image.width, 4))  # RGBA
             frame = array[:, :, :3]  # Konwersja do BGR (OpenCV)
-            frame = CDetectLane(image.width, image.height).detect_lines(frame)
+            frame = CDetectLane(image.width, image.height).detect_lanes(frame)
             self.ffmpeg_process.stdin.write(frame.tobytes())
 
 class CCamera:
@@ -104,7 +104,7 @@ class CCar:
     def start_processes(self):
         self.ffmpeg_process = CFFmpeg(self.disp_size)
         pygame.init()
-        self.screen=pygame.display.set_mode((self.disp_size[0], self.disp_size[1]))
+        self.screen=pygame.display.set_mode((self.disp_size[0]/2, self.disp_size[1]/2))
 
     def destroy_camera(self):
         try:
