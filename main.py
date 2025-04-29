@@ -16,11 +16,11 @@ class CFFmpeg:
         self.ffmpeg_process = None
         self.timestamp = datetime.datetime.now().strftime("%d-%m-%Y_%H-%M-%S")
         self.lane_detector = CDetectLane(disp_size[0], disp_size[1], log_data=True,
-                                         output_csv=f'C:/Users/Michał/Desktop/Praca-magisterska/out/{self.timestamp}.csv')
+                                         output_csv=f'C:/Users/Michał/Desktop/Praca-magisterska/PracaMagisterska/out/{self.timestamp}.csv')
 
     def start_recording(self, disp_size):
         if not self.recording:
-            filename = f'C:/Users/Michał/Desktop/Praca-magisterska/out/{self.timestamp}.avi'
+            filename = f'C:/Users/Michał/Desktop/Praca-magisterska/PracaMagisterska/out/{self.timestamp}.avi'
 
             ffmpeg_cmd = [
                 "ffmpeg",
@@ -68,7 +68,7 @@ class CFFmpeg:
             array = array.reshape((image.height, image.width, 4))  # RGBA
             frame = array[:, :, :3]  # BGR for OpenCV
             frame = self.lane_detector.detect_lanes(frame)
-
+            # frame = cv2.addWeighted(frame, 1.0, lane_overlay, 0.5, 0)  # 50% transparency for overlay
             self.ffmpeg_process.stdin.write(frame.tobytes())
 
         except (BrokenPipeError, ValueError) as e:
