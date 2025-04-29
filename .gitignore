@@ -1,6 +1,5 @@
 *.pyc
 *.png
-*.avi
 *.ipynb
 ./IMG
 *.exe
