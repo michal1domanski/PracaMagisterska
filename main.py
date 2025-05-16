@@ -4,33 +4,82 @@ import cv2
 import time
 import random
 import math
-# import ffmpeg
 import pygame
 import subprocess
 import datetime
+import os
+
+from joblib import dump, load
+import pandas as pd
+from sklearn.linear_model import Ridge
+
 from CDetectLane import CDetectLane
+
+USE_ML_MODEL = False  # Toggle between ML model and PID
+
+class CMachineLearningModel:
+    def __init__(self, model_path='C:/Users/Michał/Desktop/Praca-magisterska/PracaMagisterska/ML_model/lane_steering_model.pkl'):
+        self.model_path = model_path
+        self.model = None
+        self.data = []
+
+        # Ensure the model directory exists
+        model_dir = os.path.dirname(self.model_path)
+        if not os.path.exists(model_dir):
+            os.makedirs(model_dir)
+            print(f"✅ Created missing directory: {model_dir}")
+        else:
+            print(f"📁 Directory already exists: {model_dir}")
+
+    def predict(self, error):
+        if self.model is None:
+            self.load_model()
+        return float(self.model.predict([[error]]))
+
+    def save_model(self):
+        if self.data:
+            df = pd.DataFrame(self.data, columns=['error', 'steer'])
+            df.to_csv(self.model_path + ".csv", index=False)
+            X = df[['error']].values
+            y = df['steer'].values
+            model = Ridge()
+            model.fit(X, y)
+            dump(model, self.model_path)
+            print(f"✅ Model saved to {self.model_path}")
+
+    def load_model(self):
+        self.model = load(self.model_path)
+        print(f"📥 Loaded model from {self.model_path}")
+
+    def log_data(self, error, steer):
+        self.data.append((error, steer))
 
 class CFFmpeg:
     def __init__(self, disp_size):
         self.recording = False
         self.ffmpeg_process = None
         self.timestamp = datetime.datetime.now().strftime("%d-%m-%Y_%H-%M-%S")
-        self.lane_detector = CDetectLane(disp_size[0], disp_size[1], log_data=True,
-                                         output_csv=f'C:/Users/Michał/Desktop/Praca-magisterska/PracaMagisterska/out/{self.timestamp}.csv')
+        self.output_dir = 'C:/Users/Michał/Desktop/Praca-magisterska/PracaMagisterska/out'
+        os.makedirs(self.output_dir, exist_ok=True)
+
+        csv_path = os.path.join(self.output_dir, f'{self.timestamp}.csv')
+        self.lane_detector = CDetectLane(disp_size[0], disp_size[1], log_data=True, output_csv=csv_path)
 
     def start_recording(self, disp_size):
         if not self.recording:
-            filename = f'C:/Users/Michał/Desktop/Praca-magisterska/PracaMagisterska/out/{self.timestamp}.avi'
+            os.makedirs(self.output_dir, exist_ok=True)  # <-- Ensures directory before FFmpeg
+
+            filename = os.path.normpath(os.path.join(self.output_dir, f'{self.timestamp}.avi'))
 
             ffmpeg_cmd = [
                 "ffmpeg",
-                "-y",  # Nadpisywanie plików
+                "-y",  # Overwrite output
                 "-f", "rawvideo",
                 "-pix_fmt", "bgr24",
                 "-s", f"{disp_size[0]}x{disp_size[1]}",
                 "-r", "30",  # FPS
-                "-i", "-",  # Input z `stdin`
-                "-c:v", "libx264",#"libx264",#
+                "-i", "-",  # Input from stdin
+                "-c:v", "libx264",
                 "-preset", "ultrafast",
                 "-tune", "zerolatency",
                 "-crf", "23",
@@ -39,8 +88,16 @@ class CFFmpeg:
             ]
 
             self.ffmpeg_process = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE)
+
+            # Check if ffmpeg actually started
+            time.sleep(0.2)  # Give it a moment to crash if it's going to
+            if self.ffmpeg_process.poll() is not None:
+                print("❌ FFmpeg failed to start.")
+                self.ffmpeg_process = None
+                self.recording = False
+                return
             self.recording = True
-            print(f"🔴 Nagrywanie rozpoczęte: {filename}")
+            print(f"🔴 Recording started: {filename}")
 
     def stop_recording(self):
         if self.recording and self.ffmpeg_process:
@@ -50,36 +107,33 @@ class CFFmpeg:
                 print(f"⚠️ Error closing stdin: {e}")
             self.ffmpeg_process = None
             self.recording = False
-            print("🛑 Nagrywanie zakończone.")
+            print("🛑 Recording stopped.")
 
     def process_image(self, image):
-        """ Przetwarza obraz z kamery i wysyła do ffmpeg. """
         if not self.recording or self.ffmpeg_process is None:
             return
 
-        # Ensure ffmpeg is still alive
         if self.ffmpeg_process.poll() is not None:
-            print("⚠️ FFmpeg is no longer running.")
+            print("⚠️ FFmpeg not running.")
             self.recording = False
             return
 
         try:
             array = np.frombuffer(image.raw_data, dtype=np.uint8)
-            array = array.reshape((image.height, image.width, 4))  # RGBA
-            frame = array[:, :, :3]  # BGR for OpenCV
+            array = array.reshape((image.height, image.width, 4))
+            frame = array[:, :, :3]
             frame = self.lane_detector.detect_lanes(frame)
-            # frame = cv2.addWeighted(frame, 1.0, lane_overlay, 0.5, 0)  # 50% transparency for overlay
             self.ffmpeg_process.stdin.write(frame.tobytes())
 
         except (BrokenPipeError, ValueError) as e:
-            print(f"❌ Błąd podczas zapisu do FFmpeg: {e}")
+            print(f"❌ FFmpeg write error: {e}")
             self.recording = False
             if self.ffmpeg_process:
                 try:
                     self.ffmpeg_process.stdin.close()
                     self.ffmpeg_process.wait()
                 except Exception as close_err:
-                    print(f"⚠️ Błąd przy zamykaniu FFmpeg: {close_err}")
+                    print(f"⚠️ FFmpeg close error: {close_err}")
                 self.ffmpeg_process = None
 
 
@@ -92,8 +146,8 @@ class CCamera:
         self.camera_bp.set_attribute('image_size_y', str(disp_size[1]))
         self.camera = world.spawn_actor(self.camera_bp, camera_init_trans, attach_to=vehicle)
 
-    def start_listening(self, CFFmpeg):
-        self.camera.listen(lambda image: CFFmpeg.process_image(image)) #image.save_to_disk('C:/Users/Michał/Desktop/Praca-magisterska/out/%06d.png' % image.frame))
+    def start_listening(self, ffmpeg):
+        self.camera.listen(lambda image: ffmpeg.process_image(image))
 
     def stop_listening(self):
         self.camera.stop()
@@ -101,15 +155,15 @@ class CCamera:
     def destroy_camera(self):
         self.camera.destroy()
 
+
 class CCar:
-    def __init__(self, car_name = 'vehicle.ford.mustang'):
+    def __init__(self, car_name='vehicle.ford.mustang'):
         self.car_name = car_name
         self.client = carla.Client('localhost', 2000)
         self.client.set_timeout(10.0)
         self.world = self.client.load_world('Town04_opt', map_layers=carla.MapLayer.Ground)
         self.bp_lib = self.world.get_blueprint_library()
-        weather = carla.WeatherParameters.ClearNoon
-        self.world.set_weather(weather)
+        self.world.set_weather(carla.WeatherParameters.ClearNoon)
         self.spawn_vehicle()
         self.set_spectator_next_to_car()
 
@@ -132,8 +186,9 @@ class CCar:
 
     def start_processes(self):
         self.ffmpeg_process = CFFmpeg(self.disp_size)
+        self.model = CMachineLearningModel()
         pygame.init()
-        self.screen=pygame.display.set_mode((self.disp_size[0]/2, self.disp_size[1]/2))
+        self.screen = pygame.display.set_mode((self.disp_size[0]//2, self.disp_size[1]//2))
 
     def destroy_camera(self):
         try:
@@ -149,10 +204,9 @@ class CCar:
         self.destroy_camera()
         self.vehicle.destroy()
         self.ffmpeg_process.lane_detector.close_file()
-        print("vehicle and camera succesfully destroyed :D")
-
-    def car_go(self):
-        self.vehicle.set_autopilot(True)
+        if not USE_ML_MODEL:
+            self.model.save_model()
+        print("vehicle and camera successfully destroyed :D")
 
     def record_video(self):
         self.set_camera_on_a_car()
@@ -160,15 +214,17 @@ class CCar:
 
         clock = pygame.time.Clock()
         control = carla.VehicleControl()
-        control.throttle = 0.4  # Constant speed
+        control.throttle = 0.4
         control.steer = 0.0
 
         running = True
-        manual_control_enabled = False
-        lane_control_active = False  # <--- Added this
+        driving = False
+        lane_control_active = False
 
         lane_detector = self.ffmpeg_process.lane_detector
         self.camera.start_listening(self.ffmpeg_process)
+
+        pid = PIDController(Kp=0.7, Ki=0.02, Kd=0.1)
 
         while running:
             for event in pygame.event.get():
@@ -177,41 +233,41 @@ class CCar:
 
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_r:
-                        print("▶️ Starting car control and recording.")
+                        print("▶️ Starting...")
                         self.ffmpeg_process.start_recording(self.disp_size)
-                        manual_control_enabled = True  # <--- Start driving
-
+                        driving = True
                     elif event.key == pygame.K_k:
                         self.ffmpeg_process.stop_recording()
                         self.destroy_camera()
                         pygame.quit()
                         running = False
-
                     elif event.key == pygame.K_q:
                         running = False
 
-            if manual_control_enabled:
-                pid = PIDController(Kp=0.7, Ki=0.02, Kd=0.1)  # Tweak these as needed
+            if driving:
                 if not lane_control_active:
-                    # Go straight until lane is detected
                     control.throttle = 0.4
                     control.steer = 0.0
                     self.vehicle.apply_control(control)
-
-                    # Check for lane detection
                     if lane_detector.last_position:
                         lane_control_active = True
-                        print("✅ Lane detected — switching to AI control.")
+                        print("✅ Lane detected.")
                 else:
-                    # Follow detected lane
                     x_offset, _ = lane_detector.last_position
                     max_offset = self.disp_size[0] / 2
                     error = x_offset / max_offset
-                    steer = pid.compute(error)
+
+                    if USE_ML_MODEL:
+                        steer = self.model.predict(error)
+                    else:
+                        steer = pid.compute(error)
+                        self.model.log_data(error, steer)
+
                     control.steer = steer
                     self.vehicle.apply_control(control)
 
-            clock.tick(30)  # 30 Hz update rate
+            clock.tick(30)
+
 
 class PIDController:
     def __init__(self, Kp=0.5, Ki=0.01, Kd=0.2):
@@ -246,8 +302,8 @@ class PIDController:
 
         return np.clip(output, -1.0, 1.0)
 
+
 if __name__ == "__main__":
-    car = CCar() #"vehicle.tesla.model3"
+    car = CCar()
     car.record_video()
     car.destroy_vehicle()
-

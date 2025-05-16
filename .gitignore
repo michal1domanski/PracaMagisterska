@@ -1,5 +1,10 @@
 *.pyc
 *.png
 *.ipynb
-./IMG
+*.exe.lnk
+./ML_model
 *.exe
+*.pkl
+*.pkl.csv
+
+
