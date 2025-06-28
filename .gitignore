@@ -4,7 +4,10 @@
 *.exe.lnk
 ./ML_model
 *.exe
-*.pkl
-*.pkl.csv
+
+
+
+*.avi
+
 
 

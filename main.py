@@ -15,10 +15,10 @@ from sklearn.linear_model import Ridge
 
 from CDetectLane import CDetectLane
 
-USE_ML_MODEL = False  # Toggle between ML model and PID
+USE_ML_MODEL = True  # Toggle between ML model and PID
 
 class CMachineLearningModel:
-    def __init__(self, model_path='C:/Users/Michał/Desktop/Praca-magisterska/PracaMagisterska/ML_model/lane_steering_model.pkl'):
+    def __init__(self, model_path='C:/Users/Michał/Desktop/Praca-magisterska/PracaMagisterska/ML_model/best_lane_model.pkl'):
         self.model_path = model_path
         self.model = None
         self.data = []

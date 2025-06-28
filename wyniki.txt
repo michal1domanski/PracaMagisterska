@@ -1,0 +1,19 @@
+📊 Model Comparison:
+
+SVR
+  MSE:  0.0091
+  RMSE: 0.0952
+  MAE:  0.0502
+  R²:   0.4200
+
+Linear Regression
+  MSE:  0.0093
+  RMSE: 0.0965
+  MAE:  0.0471
+  R²:   0.4043
+
+Ridge
+  MSE:  0.0093
+  RMSE: 0.0966
+  MAE:  0.0471
+  R²:   0.4034
